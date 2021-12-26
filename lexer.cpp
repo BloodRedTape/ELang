@@ -205,6 +205,37 @@ public:
     }
 };
 
+class KeywordLexemeReader: public LexemeReader{
+private:
+    static constexpr std::pair<const char *, LexemeType> s_Keywords[] = {
+        {"int", LexemeType::Int}
+    };
+public:
+    std::optional<std::pair<Lexeme, CharacterStream>> TryRead(CharacterStream stream)override {
+        for(auto [keyword, type]: s_Keywords){
+            auto moved_stream = MoveAfterIfContains(keyword, stream);
+
+            if(moved_stream.has_value()){
+                CharacterStream new_stream = moved_stream.value();
+                if(!IsDigit(new_stream.PeekChar()) && !IsASCIILetter(new_stream.PeekChar()))
+                    return {{Lexeme(type), new_stream}};
+            }
+        }
+
+        return {};
+    }
+
+private:
+    std::optional<CharacterStream> MoveAfterIfContains(const char * str, CharacterStream stream){
+        while(char ch = *str++){
+            if(ch != stream.PeekChar())
+                return {};
+            stream.ConsumeChar();
+        }
+        return stream;
+    }
+};
+
 class Lexer{
 private:
     IdentifierTable m_IdentifierTable;
@@ -214,9 +245,10 @@ private:
     std::vector<Lexeme> m_Lexemes;
 public:
     Lexer(){
-        m_Readers.push_back(std::make_unique<SingleCharacterLexemeReader>());
-        m_Readers.push_back(std::make_unique<IdentifierLexemeReader>(m_IdentifierTable));
         m_Readers.push_back(std::make_unique<IntegerLiteralLexemeReader>());
+        m_Readers.push_back(std::make_unique<SingleCharacterLexemeReader>());
+        m_Readers.push_back(std::make_unique<KeywordLexemeReader>());
+        m_Readers.push_back(std::make_unique<IdentifierLexemeReader>(m_IdentifierTable));
     }
 
     void DoLexicalAnalysis(const std::string &sources){
@@ -227,7 +259,7 @@ public:
             for (auto &reader: m_Readers) {
                 auto result = reader->TryRead(stream);
 
-                if (result.has_value()) {
+                if (result.has_value() && stream != result->second) {
                     stream = result->second;
                     m_Lexemes.push_back(result->first);
                     lexed = true;

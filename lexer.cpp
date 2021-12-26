@@ -1,5 +1,6 @@
 #include <string>
 #include <vector>
+#include <array>
 #include <optional>
 #include <utility>
 #include <assert.h>
@@ -7,7 +8,9 @@
 #include <iostream>
 
 bool IsDigit(char ch){
-    return ch >= '0' && ch <= '9';
+    if(ch >= '0' && ch <= '9')
+        return true;
+    return false;
 }
 
 bool IsASCIILetter(char ch){
@@ -44,12 +47,14 @@ public:
     }
 
     char ConsumeChar(){
-        assert(!IsEmpty());
+        if(IsEmpty())
+            return 0;
         return Data[Position++];
     }
 
     char PeekChar(){
-        assert(!IsEmpty());
+        if(IsEmpty())
+            return 0;
         return Data[Position];
     }
 };
@@ -81,11 +86,11 @@ enum LexemeType{
     Identifier,
     Colon,
     Semicolon,
-    PlusOp,
-    //MinusOp,
-    //DivideOp,
-    //MultiplyOp,
-    AssignOp,
+    Plus,
+    Minus,
+    Divide,
+    Multiply,
+    Equal,
     Int,
     IntLiteral,
 };
@@ -94,7 +99,7 @@ struct Lexeme{
     const LexemeType Type;
     const size_t Data;
 
-    Lexeme(LexemeType type, size_t data):
+    Lexeme(LexemeType type, size_t data = -1):
         Type(type),
         Data(data)
     {}
@@ -164,14 +169,41 @@ public:
             buffer.Add(stream.ConsumeChar());
         }
 
-        std::cout << "Read: " << buffer.Data() << std::endl;
-
         auto index = m_Table.Add(buffer.Data(), buffer.Length());
 
         return {{Lexeme(LexemeType::Identifier, index), stream}};
     }
 };
 
+class SingleCharacterLexemeReader: public LexemeReader{
+    static constexpr std::pair<char, LexemeType> s_SingleCharacterLexemes[] = {
+        {':', LexemeType::Colon},
+        {';', LexemeType::Semicolon},
+        {'=', LexemeType::Equal},
+        {'+', LexemeType::Plus},
+        {'-', LexemeType::Minus},
+        {'*', LexemeType::Divide},
+        {'/', LexemeType::Multiply},
+    };
+public:
+    std::optional<std::pair<Lexeme, CharacterStream>> TryRead(CharacterStream stream)override {
+        char ch = stream.ConsumeChar();
+
+        for(auto [character, type]: s_SingleCharacterLexemes)
+            if(ch == character)
+                return {{Lexeme(type), stream}};
+        return {};
+    }
+};
+
+class IntegerLiteralLexemeReader: public LexemeReader{
+public:
+    std::optional<std::pair<Lexeme, CharacterStream>> TryRead(CharacterStream stream)override {
+        while(IsDigit(stream.PeekChar()))
+            stream.ConsumeChar();
+        return {{Lexeme(LexemeType::IntLiteral), stream}};
+    }
+};
 
 class Lexer{
 private:
@@ -182,22 +214,28 @@ private:
     std::vector<Lexeme> m_Lexemes;
 public:
     Lexer(){
+        m_Readers.push_back(std::make_unique<SingleCharacterLexemeReader>());
         m_Readers.push_back(std::make_unique<IdentifierLexemeReader>(m_IdentifierTable));
+        m_Readers.push_back(std::make_unique<IntegerLiteralLexemeReader>());
     }
 
     void DoLexicalAnalysis(const std::string &sources){
         CharacterStream stream(sources.data(), sources.size());
 
         while(!stream.IsEmpty()) {
+            bool lexed = false;
             for (auto &reader: m_Readers) {
                 auto result = reader->TryRead(stream);
 
                 if (result.has_value()) {
                     stream = result->second;
                     m_Lexemes.push_back(result->first);
+                    lexed = true;
                     break;
                 }
+                std::cout << "Tick" << std::endl;
             }
+            assert(lexed);
             while(!stream.IsEmpty() && (stream.PeekChar() == '\n'
             || stream.PeekChar() == '\t' || stream.PeekChar() == ' '
             || stream.PeekChar() == '\r' || stream.PeekChar() == '\0'))
@@ -209,5 +247,20 @@ public:
                 std::cout << ch;
             std::cout << '\n';
         }
+
+        static constexpr const char *s_LexemeNames[]={
+            "Identifier",
+            "Colon",
+            "Semicolon",
+            "Plus",
+            "Minus",
+            "Divide",
+            "Multiply",
+            "Equal",
+            "Int",
+            "IntLiteral"
+        };
+        for(auto l: m_Lexemes)
+            std::cout << s_LexemeNames[l.Type] << '\n';
     }
 };

@@ -15,7 +15,7 @@ std::string ReadEntireFile(const char *path){
 }
 
 int main() {
-    auto src = ReadEntireFile("examples/test.e");
+    auto src = ReadEntireFile("examples/base.e");
     Lexer lexer;
     lexer.DoLexicalAnalysis(src);
     return 0;

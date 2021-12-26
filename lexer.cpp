@@ -101,12 +101,7 @@ struct Lexeme{
 };
 
 class LexemeReader{
-private:
-    const LexemeType Type;
 public:
-    LexemeReader(LexemeType type):
-        Type(type)
-    {}
 
     virtual std::optional<std::pair<Lexeme, CharacterStream>> TryRead(CharacterStream stream) = 0;
 };
@@ -115,22 +110,36 @@ class IdentifierTable{
 public:
     static constexpr size_t MaxIdentifierSize = 256;
 private:
+    struct Identifier{
+        size_t Begin = 0;
+        size_t Size  = 0;
+    };
     std::vector<char> m_Data;
-    std::vector<std::string_view> m_Identifiers;
+    std::vector<Identifier> m_Identifiers;
 public:
     IdentifierTable(){
         m_Data.reserve(200000);
     }
     size_t Add(const char *identifier, size_t size){
-        m_Data.insert(m_Data.end(), identifier, identifier + size);
+        size_t begin = m_Data.size();
 
-        m_Identifiers.push_back({m_Data.data() - size, size});
+        for(int i = 0; i<size; i++)
+            m_Data.push_back(identifier[i]);
+        m_Data.push_back(0);
 
-        return m_Identifiers.size() - 1;
+        m_Identifiers.push_back({begin, size});
+
+        return m_Identifiers.size() - 1;//last index
     }
 
-    const std::vector<std::string_view> &Identifiers()const{
-        return m_Identifiers;
+    std::vector<std::string_view> Identifiers()const{
+        std::vector<std::string_view> views;
+        views.reserve(m_Identifiers.size());
+
+        for(auto id: m_Identifiers)
+            views.push_back({&m_Data[id.Begin], id.Size});
+
+        return views;
     }
 };
 
@@ -139,7 +148,6 @@ private:
     IdentifierTable &m_Table;
 public:
     IdentifierLexemeReader(IdentifierTable &table):
-        LexemeReader(LexemeType::Identifier),
         m_Table(table)
     {}
 
